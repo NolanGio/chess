@@ -22,7 +22,7 @@ def main():
             print("\n\n")
             chess.play(command)
             chess.generate_moves()
-            print(chess.moves, "\n")
+            print("Moves: ", chess.moves, "\n")
     return
 
 

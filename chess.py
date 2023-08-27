@@ -91,7 +91,7 @@ def startBoardFromFen(fen_string:str, first_turn:int):
 def play(move:list[int]):
     '''Plays a move on the board array'''
     # Is there a promotion to be made?
-    global must_promote
+    global must_promote, last_move
     if must_promote:
         print("Must promote on square:", must_promote)
     else:
@@ -127,7 +127,8 @@ def generate_moves(): #TODO
     This function does not keep track of legal moves.
     This affects the moves array of the module
     '''
-    add_moves = []
+    global moves
+    moves = []
     if turn == piece.white:
         for i in range(len(board)):
             square = board[i]
