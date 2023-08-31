@@ -11,6 +11,7 @@ def main():
     chess.startBoardFromFen(
     "rnbqkbnrpppppppp////PPPPPPPPRNBQKBNR",
     chess.piece.white)
+    print("Moves:", chess.moves, "\n")
     run = True
     while run:
         draw()
@@ -20,9 +21,14 @@ def main():
         elif command:
             command = [int(word.strip()) for word in command.split()]
             print("\n\n")
-            chess.play(command)
-            chess.generate_moves()
-            print("Moves: ", chess.moves, "\n")
+            if len(command) == 1:
+                chess.promote(command[0])
+            else:
+                chess.play(command)
+                chess.generate_legal_moves()
+                print("Moves:", chess.moves)
+                print("Winner:", chess.over, "\n")
+
     return
 
 

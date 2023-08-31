@@ -10,6 +10,7 @@ class piece:
     king = 6
     white = 8
     black = 16
+    draw = 7
 
 board = [0]*64
 '''The chess board using a single array representation'''
@@ -21,9 +22,36 @@ last_move = []
 '''Last move taken by previous player:[source, destination, piece]'''
 must_promote = []
 '''Array used as boolean to indicate if promote() function must be called to promote a pawn on said square'''
+over = 0
+'''Who won\nNone: 0\nWhite: piece.white\nBlack: piece.black\nDraw: piece.draw'''
 
-def startBoardFromFen(fen_string:str, first_turn:int):
-    '''Starts the board array using FEN notation'''
+# Variables used to check for castling
+Km = False # White king has moved
+Rrm = False # White rook right has moved
+Rlm = False # White rook left has moved
+km = False # Black king has moved
+rrm = False # Black rook right has moved
+rlm = False # Black rook left has moved
+
+def startBoardFromFen(fen_string:str, first_turn:int, 
+    hKm:bool = False, hRrm:bool = False, hRlm:bool = False,
+    hkm:bool = False, hrrm:bool = False, hrlm:bool = False,):
+    '''
+    Starts the board array using FEN notation.
+    You can specify if any of the pieces used 
+    for castling has moved.\n
+    hKm: has white king moved\n
+    hRrm: has white rook on right moved\n
+    hRlm: has white rook on left moved\n
+    hrm: has black king moved\n
+    hrrm: has black rook on right moved\n
+    hrlm: has black king on left moved
+    '''
+    
+    global Km, Rrm, Rlm, km, rrm, rlm
+    # Assign castling booleans:
+    Km, Rrm, Rlm, km, rrm, rlm = hKm, hRrm, hRlm, hkm, hrrm, hrlm
+
     # Check for valid first player
     if first_turn == piece.white or first_turn == piece.black:
         turn = first_turn
@@ -87,62 +115,378 @@ def startBoardFromFen(fen_string:str, first_turn:int):
             x += 1
             y += x//8
             x %= 8
+    generate_legal_moves()
+    return
 
 def play(move:list[int]):
     '''Plays a move on the board array'''
     # Is there a promotion to be made?
-    global must_promote, last_move
+    global must_promote, last_move, Km, Rrm, Rlm, km, rrm, rlm, turn, over
     if must_promote:
         print("Must promote on square:", must_promote)
+    elif over:
+        print("Game is already over")
     else:
         board[move[1]] = board[move[0]]
         board[move[0]] = 0
         last_move = [move[0], move[1], board[move[1]]]
         if len(move) == 3:
             board[move[2]] = 0
-        if last_move[2] & piece.pawn and (last_move[1] // 8 == 0 or last_move[1] // 8 == 7):
-            promote = [last_move[1]]
+        if len(move) == 4:
+            board[move[3]] = board[move[2]]
+            board[move[2]] = 0
+        if not Km: # Update castling booleans for White
+            if last_move[2] == piece.king | piece.white:
+                Km = True
+            if not Rrm:
+                if last_move[2] == piece.rook | piece.white:
+                    if last_move[0] == 63:
+                        Rrm = True
+            if not Rlm:
+                if last_move[2] == piece.rook | piece.white:
+                    if last_move[0] == 56:
+                        Rlm = True
+        if not km: # Update castling booleans for black
+            if last_move[2] == piece.king | piece.black:
+                km = True
+            if not rrm:
+                if last_move[2] == piece.rook | piece.black:
+                    if last_move[0] == 7:
+                        rrm = True
+            if not rlm:
+                if last_move[2] == piece.rook | piece.black:
+                    if last_move[0] == 0:
+                        rlm = True
+        if (last_move[2] == piece.white | piece.pawn and last_move[1] // 8 == 0) or (last_move[2] == piece.black | piece.pawn and last_move[1] // 8 == 7):
+            must_promote = [last_move[1]]
+        else:
+            if turn == piece.white:
+                turn = piece.black
+            else:
+                turn = piece.white
+        generate_legal_moves()
     return
 
-def _play(move:list[int], board:list[int]):
+def _play(move:list[int], new_board:list[int]):
     '''Same as play but for legal moves generation'''
-    board[move[1]] = board[move[0]]
-    board[move[0]] = 0
+    new_board[move[1]] = new_board[move[0]]
+    new_board[move[0]] = 0
+    last_move = [move[0], move[1], new_board[move[1]]]
     if len(move) == 3:
-        board[move[2]] = 0
-    return
+        new_board[move[2]] = 0
+    if len(move) == 4:
+        new_board[move[3]] = new_board[move[2]]
+        new_board[move[2]] = 0
+    return new_board
 
-def promote(piece:int):
-    if piece in [2, 3, 4, 5]:
-        board[must_promote] = piece
-        must_promote = []
+def promote(new_piece:int):
+    '''Promotes the piece on must_promote square with the given value'''
+    global piece, must_promote, turn
+    print(new_piece)
+    if must_promote:
+        if new_piece in [2, 3, 4, 5]:
+            color = piece.black if board[must_promote[0]] > 15 else piece.white
+            board[must_promote[0]] = new_piece | color
+            must_promote = []
+            if turn == piece.white:
+                turn = piece.black
+            else:
+                turn = piece.white
+        else:
+            raise ValueError("piece must be defined using valid pieces constants such as piece.queen")
     else:
-        raise ValueError("piece must be defined using valid pieces constants such as piece.queen")
+        raise RuntimeError("This must be called only when must_promote is True")
     return
 
-def generate_moves(): #TODO
+def generate_moves():
     '''
     Generate moves (ex. [56, 40]) which indicate start, and arrival.
     This array will have a 3rd value for square capture (ex. enpassant).
+    This array will have a 4th value for second move (ex. castling).
     This function does not keep track of legal moves.
     This affects the moves array of the module
     '''
-    global moves
+    global moves, Km, Rrm, Rlm, km, rrm, rlm, turn
     moves = []
-    if turn == piece.white:
-        for i in range(len(board)):
-            square = board[i]
-            if square & piece.white:
-                # Generate moves for each piece
-                if square & piece.pawn:
-                    add_moves = [[i, i-8]]
-                    # Check for double step
-                    if i//8 == 6:
-                        add_moves = [[i, i-8], [i, i-16]]
+    for i in range(len(board)):
+        square = board[i]
+        if square & turn == piece.white:
+            # Generate moves for each piece
+            if square & piece.king == piece.king:
+                add_moves = [[i, i-9],[i, i-8],[i, i-7],
+                              [i, i-1],         [i, i+1],
+                              [i, i+7],[i, i+8],[i, i+9]]
+                    
+                # Remove moves where king teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-1, 0, 1]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Check for castling
+                if not Km:
+                    if not Rrm and board[i+1] == 0 and board[i+2] == 0:
+                        add_moves.append([i, i+2, i+3, i+1])
+                    if not Rlm and board[i-1] == 0 and board[i-2] == 0 and board[i-3] == 0:
+                        add_moves.append([i, i-2, i-4, i-1])
+                # Remove moves that would capture white pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.white == piece.white:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.queen == piece.queen:
+                add_moves = []
+                x, y = i % 8, i // 8 
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.rook == piece.rook:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.knight == piece.knight:
+                add_moves = [
+                        [i, i-17],      [i, i-15],
+                [i, i-10],                      [i, i-6],
+
+                 [i, i+6],                       [i, i+10],
+                        [i, i+15],      [i, i+17],
+                ]
+                # Remove moves where knight teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-2, -1, 1, 2]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Remove moves that would capture white pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.white == piece.white:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.bishop == piece.bishop:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.pawn == piece.pawn:
+                if i // 8 != 0:
+                    add_moves = []
+                    # Non capture moves
+                    if board[i-8] == 0:
+                        add_moves.append([i, i-8])
+                        if i//8 == 6 and board[i-16] == 0:
+                            add_moves.append([i, i-16])
+                    # Capture moves
+                    if board[i-7] != 0:
+                        add_moves.append([i, i-7])
+                    if board[i-9] != 0:
+                        add_moves.append([i, i-9])                    
                     # Check for enpassant if there was a previous move
                     if last_move:
                         # Check if double step was made by a pawn
-                        if last_move[2] & piece.pawn:
+                        if last_move[2] & piece.pawn == piece.pawn:
                             if last_move[0] == i-17 and last_move[1] == i-1:
                                 add_moves.append([i, i-9, i-1])
                             elif last_move[0] == i-15 and last_move[1] == i+1:
@@ -150,121 +494,302 @@ def generate_moves(): #TODO
                     # Remove moves that would capture white pieces
                     j = 0
                     while j < len(add_moves):
-                        if board[add_moves[j][1]] & piece.white:
+                        if board[add_moves[j][1]] & piece.white == piece.white:
                             add_moves.pop(j)
                         else:
                             j += 1
                     moves.extend(add_moves)
-                    continue
-                elif square & piece.bishop:
-                    continue
-                elif square & piece.knight:
+                continue
+        elif square & turn == piece.black:
+            # Generate moves for each piece
+            if square & piece.king == piece.king:
+                add_moves = [[i, i-9],[i, i-8],[i, i-7],
+                              [i, i-1],         [i, i+1],
+                              [i, i+7],[i, i+8],[i, i+9]]
+                    
+                # Remove moves where king teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-1, 0, 1]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Check for castling
+                if not km:
+                    if not rrm and board[i+1] == 0 and board[i+2] == 0:
+                        add_moves.append([i, i+2, i+3, i+1])
+                    if not rlm and board[i-1] == 0 and board[i-2] == 0 and board[i-3] == 0:
+                        add_moves.append([i, i-2, i-4, i-1])
+                # Remove moves that would capture black pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.black == piece.black:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.queen == piece.queen:
+                add_moves = []
+                x, y = i % 8, i // 8 
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.rook == piece.rook:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.knight == piece.knight:
+                add_moves = [
+                        [i, i-17],      [i, i-15],
+                [i, i-10],                      [i, i-6],
+
+                 [i, i+6],                       [i, i+10],
+                        [i, i+15],      [i, i+17],
+                ]
+                # Remove moves where knight teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-2, -1, 1, 2]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Remove moves that would capture black pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.black == piece.black:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.bishop == piece.bishop:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                moves.extend(add_moves)
+                continue
+            elif square & piece.pawn == piece.pawn:
+                if i // 8 != 7:
                     add_moves = []
-                    # Remove moves that would capture white pieces
+                    # Non capture moves
+                    if board[i+8] == 0:
+                        add_moves.append([i, i+8])
+                        if i//8 == 1 and board[i+16] == 0:
+                            add_moves.append([i, i+16])
+                    # Capture moves
+                    if board[i+7] != 0:
+                        add_moves.append([i, i+7])
+                    if board[i+9] != 0:
+                        add_moves.append([i, i+9])                    
+                    # Check for enpassant if there was a previous move
+                    if last_move:
+                        # Check if double step was made by a pawn
+                        if last_move[2] & piece.pawn == piece.pawn:
+                            if last_move[0] == i+17 and last_move[1] == i+1:
+                                add_moves.append([i, i+9, i+1])
+                            elif last_move[0] == i+15 and last_move[1] == i-1:
+                                add_moves.append([i, i+7, i-1])
+                    # Remove moves that would capture black pieces
                     j = 0
                     while j < len(add_moves):
-                        if add_moves[j][1] & piece.white:
+                        if board[add_moves[j][1]] & piece.black == piece.black:
                             add_moves.pop(j)
                         else:
                             j += 1
                     moves.extend(add_moves)
-                    continue
-                elif square & piece.rook:
-                    continue
-                elif square & piece.queen:
-                    continue
-                elif square & piece.king:
-                    add_moves = [[i, i-9],[i, i-8],[i, i-7],
-                                  [i, i-1],         [i, i+1],
-                                  [i, i+7],[i, i+8],[i, i+9]]
-                    # Remove moves that would capture white pieces
-                    j = 0
-                    while j < len(add_moves):
-                        if board[add_moves[j][1]] & piece.white:
-                            add_moves.pop(j)
-                        else:
-                            j += 1
-                    moves.extend(add_moves)
-                    continue
-    else:
-        for i in range(len(board)):
-            square = board[i]
-            if square & piece.white:
-                # Generate moves for each piece
-                if square & piece.pawn:
-                    add_moves = [[i, i-8]]
-                    # Check for double step
-                    if i//8 == 6:
-                        add_moves.append([i, i-16])
-                    # Check for enpassant
-                    if last_move[2] & piece.pawn:
-                        if last_move[0] == i-17 and last_move[1] == i-1:
-                            add_moves.append([i, i-9, piece.white])
-                        elif last_move[0] == i-15 and last_move[1] == i+1:
-                            add_moves.append([i, i-7, piece.white])
-                    # Remove moves that would capture white pieces
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] & piece.white:
-                            add_moves.pop(j)
-                    moves.extend(add_moves)
-                    continue
-                elif square & piece.knight:
-                    add_moves = [[i, i-9],[i, i-8],[i, i-7],
-                                  [i, i-1],         [i, i+1],
-                                  [i, i+7],[i, i+8],[i, i+9]]
-                    # Remove moves that would capture white pieces
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] & piece.white:
-                            add_moves.pop(j)
-                    moves.extend(add_moves)
-                    continue
-                elif square & piece.bishop:
-                    add_moves = [[i, i-9],[i, i-8],[i, i-7],
-                                  [i, i-1],         [i, i+1],
-                                  [i, i+7],[i, i+8],[i, i+9]]
-                    # Remove moves that would capture white pieces
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] & piece.white:
-                            add_moves.pop(j)
-                    moves.extend(add_moves)
-                    continue
-                elif square & piece.rook:
-                    add_moves = [[i, i-9],[i, i-8],[i, i-7],
-                                  [i, i-1],         [i, i+1],
-                                  [i, i+7],[i, i+8],[i, i+9]]
-                    # Remove moves that would capture white pieces
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] & piece.white:
-                            add_moves.pop(j)
-                    moves.extend(add_moves)
-                    continue
-                elif square & piece.queen:
-                    add_moves = [[i, i-9],[i, i-8],[i, i-7],
-                                  [i, i-1],         [i, i+1],
-                                  [i, i+7],[i, i+8],[i, i+9]]
-                    # Remove moves that would capture white pieces
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] & piece.white:
-                            add_moves.pop(j)
-                    moves.extend(add_moves)
-                    continue
-                elif square & piece.king:
-                    add_moves = [[i, i-9],[i, i-8],[i, i-7],
-                                  [i, i-1],         [i, i+1],
-                                  [i, i+7],[i, i+8],[i, i+9]]
-                    # Remove moves where king teleports
-                    j = 0
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] < 0 or add_moves[j][1] > 63 or (add_moves[j][0] % 8 - add_moves[j][1] % 8)**2 != 1:
-                            add_moves.pop(j)
-                        else:
-                            j += 1
-                    # Remove moves that would capture white pieces
-                    for j in range(len(add_moves)):
-                        if add_moves[j][1] & piece.white:
-                            add_moves.pop(j)
-                    moves.extend(add_moves)
-                    continue
+                continue
     return
 
 def _generate_moves(turn:int, board:list[int]): #TODO
@@ -273,18 +798,605 @@ def _generate_moves(turn:int, board:list[int]): #TODO
     Returns a list of possible moves.
     Used to check for non legal moves.
     '''
-    new_moves = []
-    return new_moves
+    nmoves = []
+    for i in range(len(board)):
+        square = board[i]
+        if square & turn == piece.white:
+            # Generate moves for each piece
+            if square & piece.king == piece.king:
+                add_moves = [[i, i-9],[i, i-8],[i, i-7],
+                              [i, i-1],         [i, i+1],
+                              [i, i+7],[i, i+8],[i, i+9]]
+                    
+                # Remove moves where king teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-1, 0, 1]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Check for castling
+                if not Km:
+                    if not Rrm and board[i+1] == 0 and board[i+2] == 0:
+                        add_moves.append([i, i+2, i+3, i+1])
+                    if not Rlm and board[i-1] == 0 and board[i-2] == 0 and board[i-3] == 0:
+                        add_moves.append([i, i-2, i-4, i-1])
+                # Remove moves that would capture white pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.white == piece.white:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.queen == piece.queen:
+                add_moves = []
+                x, y = i % 8, i // 8 
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.rook == piece.rook:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.knight == piece.knight:
+                add_moves = [
+                        [i, i-17],      [i, i-15],
+                [i, i-10],                      [i, i-6],
+
+                 [i, i+6],                       [i, i+10],
+                        [i, i+15],      [i, i+17],
+                ]
+                # Remove moves where knight teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-2, -1, 1, 2]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Remove moves that would capture white pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.white == piece.white:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.bishop == piece.bishop:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.pawn == piece.pawn:
+                if i // 8 != 0:
+                    add_moves = []
+                    # Non capture moves
+                    if board[i-8] == 0:
+                        add_moves.append([i, i-8])
+                        if i//8 == 6 and board[i-16] == 0:
+                            add_moves.append([i, i-16])
+                    # Capture moves
+                    if board[i-7] != 0:
+                        add_moves.append([i, i-7])
+                    if board[i-9] != 0:
+                        add_moves.append([i, i-9])                    
+                    # Check for enpassant if there was a previous move
+                    if last_move:
+                        # Check if double step was made by a pawn
+                        if last_move[2] & piece.pawn == piece.pawn:
+                            if last_move[0] == i-17 and last_move[1] == i-1:
+                                add_moves.append([i, i-9, i-1])
+                            elif last_move[0] == i-15 and last_move[1] == i+1:
+                                add_moves.append([i, i-7, i+1])
+                    # Remove moves that would capture white pieces
+                    j = 0
+                    while j < len(add_moves):
+                        if board[add_moves[j][1]] & piece.white == piece.white:
+                            add_moves.pop(j)
+                        else:
+                            j += 1
+                    nmoves.extend(add_moves)
+                continue
+        elif square & turn == piece.black:
+            # Generate moves for each piece
+            if square & piece.king == piece.king:
+                add_moves = [[i, i-9],[i, i-8],[i, i-7],
+                              [i, i-1],         [i, i+1],
+                              [i, i+7],[i, i+8],[i, i+9]]
+                    
+                # Remove moves where king teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-1, 0, 1]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Check for castling
+                if not km:
+                    if not rrm and board[i+1] == 0 and board[i+2] == 0:
+                        add_moves.append([i, i+2, i+3, i+1])
+                    if not rlm and board[i-1] == 0 and board[i-2] == 0 and board[i-3] == 0:
+                        add_moves.append([i, i-2, i-4, i-1])
+                # Remove moves that would capture black pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.black == piece.black:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.queen == piece.queen:
+                add_moves = []
+                x, y = i % 8, i // 8 
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.rook == piece.rook:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x: # right loop
+                    if i+j > 63:
+                        j = 8
+                    elif board[i+j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j] & piece.white == piece.white:
+                        add_moves.append([i, i+j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j])
+                        j += 1
+                j = 1
+                while j < x+1: # left loop
+                    if i-j < 0:
+                        j = 8
+                    elif board[i-j] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j] & piece.white == piece.white:
+                        add_moves.append([i, i-j])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j])
+                        j += 1
+                j = 1
+                while j < 8 - y: # down loop
+                    if i+j*8 > 63:
+                        j = 8
+                    elif board[i+j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*8] & piece.white == piece.white:
+                        add_moves.append([i, i+j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*8])
+                        j += 1
+                j = 1
+                while j < y+1: # up loop
+                    if i-j*8 < 0:
+                        j = 8
+                    elif board[i-j*8] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*8] & piece.white == piece.white:
+                        add_moves.append([i, i-j*8])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*8])
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.knight == piece.knight:
+                add_moves = [
+                        [i, i-17],      [i, i-15],
+                [i, i-10],                      [i, i-6],
+
+                 [i, i+6],                       [i, i+10],
+                        [i, i+15],      [i, i+17],
+                ]
+                # Remove moves where knight teleports
+                j = 0
+                while j < len(add_moves):
+                    if not(0 <= add_moves[j][1]//8 <= 7) or ((add_moves[j][1] % 8 - add_moves[j][0] % 8) not in [-2, -1, 1, 2]):
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                # Remove moves that would capture black pieces
+                j = 0
+                while j < len(add_moves):
+                    if board[add_moves[j][1]] & piece.black == piece.black:
+                        add_moves.pop(j)
+                    else:
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.bishop == piece.bishop:
+                add_moves = []
+                x, y = i % 8, i // 8
+                j = 1
+                while j < 8 - x and j < 8 - y: # down-right loop
+                    if i+j*9 > 63:
+                        j = 8
+                    elif board[i+j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*9] & piece.white == piece.white:
+                        add_moves.append([i, i+j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*9])
+                        j += 1
+                j = 1
+                while j < x+1 and j < y+1: # up-left loop
+                    if i-j*9 < 0:
+                        j = 8
+                    elif board[i-j*9] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*9] & piece.white == piece.white:
+                        add_moves.append([i, i-j*9])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*9])
+                        j += 1
+                j = 1
+                while j < 8 - y and j < x+1: # down-left loop
+                    if i+j*7 > 63:
+                        j = 8
+                    elif board[i+j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i+j*7] & piece.white == piece.white:
+                        add_moves.append([i, i+j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i+j*7])
+                        j += 1
+                j = 1
+                while j < y+1 and j < 8 - x: # up-right loop
+                    if i-j*7 < 0:
+                        j = 8
+                    elif board[i-j*7] & piece.black == piece.black:
+                        j = 8
+                    elif board[i-j*7] & piece.white == piece.white:
+                        add_moves.append([i, i-j*7])
+                        j = 8
+                    else:
+                        add_moves.append([i, i-j*7])
+                        j += 1
+                nmoves.extend(add_moves)
+                continue
+            elif square & piece.pawn == piece.pawn:
+                if i // 8 != 7:
+                    add_moves = []
+                    # Non capture moves
+                    if board[i+8] == 0:
+                        add_moves.append([i, i+8])
+                        if i//8 == 1 and board[i+16] == 0:
+                            add_moves.append([i, i+16])
+                    # Capture moves
+                    if board[i+7] != 0:
+                        add_moves.append([i, i+7])
+                    if board[i+9] != 0:
+                        add_moves.append([i, i+9])                    
+                    # Check for enpassant if there was a previous move
+                    if last_move:
+                        # Check if double step was made by a pawn
+                        if last_move[2] & piece.pawn == piece.pawn:
+                            if last_move[0] == i+17 and last_move[1] == i+1:
+                                add_moves.append([i, i+9, i+1])
+                            elif last_move[0] == i+15 and last_move[1] == i-1:
+                                add_moves.append([i, i+7, i-1])
+                    # Remove moves that would capture black pieces
+                    j = 0
+                    while j < len(add_moves):
+                        if board[add_moves[j][1]] & piece.black == piece.black:
+                            add_moves.pop(j)
+                        else:
+                            j += 1
+                    nmoves.extend(add_moves)
+                continue
+    return nmoves
     
 def generate_legal_moves():
     '''Removes moves that result in possible capture of allied king'''
+    global board, moves, turn, over
+
+    # Generate moves 
     generate_moves()
-    for i in range(len(moves)):
+    
+    i = 0
+    while i < len(moves):
         
         # Loop through possible moves and play them
-        move = moves[i]
-        new_board = board
-        _play(move, new_board)
+        test_move = moves[i]
+        new_board = board.copy()
+        new_board = _play(test_move, new_board)
         
         # Generate moves for opponent
         if turn == piece.white:
@@ -299,14 +1411,45 @@ def generate_legal_moves():
             if turn == piece.white:
                 if new_board[new_move[1]] == piece.king | piece.white:
                     legal = False
+                if len(test_move) == 4 and new_move[1] == 60:
+                    legal = False
             else:
                 if new_board[new_move[1]] == piece.king | piece.black:
                     legal = False
+                if len(test_move) == 4 and new_move[1] == 4:
+                    legal = False
+            if len(test_move) == 4:
+                if new_move[1] == test_move[3]:
+                    legal = False
+
+            j += 1
         if not legal:
             moves.pop(i)
-
+        else:
+            i += 1
+    if len(moves) == 0:
+        if turn == piece.white:
+            new_moves = _generate_moves(piece.black, board)
+            draw = True
+            for new_move in new_moves:
+                if new_move[1] == piece.white | piece.king:
+                    draw = False
+            if not draw:
+                over = piece.draw
+            else:
+                over = piece.black
+        else:
+            new_moves = _generate_moves(piece.white, board)
+            draw = True
+            for new_move in new_moves:
+                if new_move[1] == piece.black | piece.king:
+                    draw = False
+            if not draw:
+                over = piece.draw
+            else:
+                over = piece.white
     return
 
 def minimax(depth:int): #TODO
-    '''Performs minimax selection of best move (AI)'''
+    '''Performs minimax selection of best move over *depth* moves'''
     return

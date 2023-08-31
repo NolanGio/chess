@@ -2,29 +2,28 @@ import pygame, sys
 pygame.init()
 
 # set up the window
-size = (640, 640)
+width, height =  530, 530
+size = (width, height)
 screen = pygame.display.set_mode(size)
 pygame.display.set_caption("Chess Game")
 
 # set up the board
-board = pygame.Surface((600, 600))
-board.fill((0, 0, 0))
-for x in range(0, 8, 2):
-    for y in range(0, 8, 2):
-        pygame.draw.rect(board, (210, 180, 140), (x*75, y*75, 75, 75))
-        pygame.draw.rect(board, (210, 180, 140), ((x+1)*75, (y+1)*75, 75, 75))
-
+board = pygame.image.load("board.png")
+run = True
 
 # main loop
-while True:
+while run:
     # Event poll
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+            run = False    
     
     # Draw
-    screen.blit(board, (20, 20))
+    screen.fill("#5F5F5F")
+    screen.blit(board, (0, 0))
 
     # Show
     pygame.display.flip()
+
+pygame.quit()
+sys.exit()
