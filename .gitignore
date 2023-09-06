@@ -1,2 +1,5 @@
 __pycache__
 pyinstaller.exe
+build
+dist
+chess.spec
