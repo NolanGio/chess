@@ -38,7 +38,7 @@ def main():
     Rrect = rimg.get_rect(topleft = (width/2, height/2-piece_size/2))
     Qrect = qimg.get_rect(topleft = (width/2 + piece_size, height/2-piece_size/2))
     GRAY = (60, 60, 60)
-    menu_font = pygame.font.SysFont("Arial", 50, False, False)
+    menu_font = pygame.font.Font("assets/arial.ttf", 50)
     cancel_surf = menu_font.render("X", False, GRAY)
     cancel_rect = cancel_surf.get_rect(topleft=(width/2+piece_size*2, height/2-size/2))
     
@@ -58,8 +58,8 @@ def main():
     capture_surf.set_alpha(64)
 
     # Fonts
-    promotion_font = pygame.font.SysFont("Arial", 24, False, False)
-    game_font = pygame.font.SysFont("Arial", 50, False, False)
+    promotion_font = pygame.font.Font("assets/arial.ttf", 24)
+    game_font = pygame.font.Font("assets/arial.ttf", 50)
     font_color = (0, 0, 0)
 
     chess.startBoardFromFen(

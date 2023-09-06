@@ -208,7 +208,7 @@ def generate_moves():
         square = board[i]
         if square & turn == piece.white:
             # Generate moves for each piece
-            if square & piece.king == piece.king:
+            if square % piece.white == piece.king:
                 add_moves = [[i, i-9],[i, i-8],[i, i-7],
                               [i, i-1],         [i, i+1],
                               [i, i+7],[i, i+8],[i, i+9]]
@@ -235,7 +235,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.queen == piece.queen:
+            elif square % piece.white == piece.queen:
                 add_moves = []
                 x, y = i % 8, i // 8 
                 j = 1
@@ -336,7 +336,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.rook == piece.rook:
+            elif square % piece.white == piece.rook:
                 add_moves = []
                 x, y = i % 8, i // 8
                 j = 1
@@ -389,7 +389,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.knight == piece.knight:
+            elif square % piece.white == piece.knight:
                 add_moves = [
                         [i, i-17],      [i, i-15],
                 [i, i-10],                      [i, i-6],
@@ -413,7 +413,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.bishop == piece.bishop:
+            elif square % piece.white == piece.bishop:
                 add_moves = []
                 x, y = i % 8, i // 8
                 j = 1
@@ -466,7 +466,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.pawn == piece.pawn:
+            elif square % piece.white == piece.pawn:
                 if i // 8 != 0:
                     add_moves = []
                     # Non capture moves
@@ -482,7 +482,7 @@ def generate_moves():
                     # Check for enpassant if there was a previous move
                     if last_move:
                         # Check if double step was made by a pawn
-                        if last_move[2] & piece.pawn == piece.pawn:
+                        if last_move[2] % piece.white == piece.pawn:
                             if last_move[0] == i-17 and last_move[1] == i-1:
                                 add_moves.append([i, i-9, i-1])
                             elif last_move[0] == i-15 and last_move[1] == i+1:
@@ -506,7 +506,7 @@ def generate_moves():
                 continue
         elif square & turn == piece.black:
             # Generate moves for each piece
-            if square & piece.king == piece.king:
+            if square % piece.white == piece.king:
                 add_moves = [[i, i-9],[i, i-8],[i, i-7],
                               [i, i-1],         [i, i+1],
                               [i, i+7],[i, i+8],[i, i+9]]
@@ -533,7 +533,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.queen == piece.queen:
+            elif square % piece.white == piece.queen:
                 add_moves = []
                 x, y = i % 8, i // 8 
                 j = 1
@@ -634,7 +634,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.rook == piece.rook:
+            elif square % piece.white == piece.rook:
                 add_moves = []
                 x, y = i % 8, i // 8
                 j = 1
@@ -687,7 +687,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.knight == piece.knight:
+            elif square % piece.white == piece.knight:
                 add_moves = [
                         [i, i-17],      [i, i-15],
                 [i, i-10],                      [i, i-6],
@@ -711,7 +711,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.bishop == piece.bishop:
+            elif square % piece.white == piece.bishop:
                 add_moves = []
                 x, y = i % 8, i // 8
                 j = 1
@@ -764,7 +764,7 @@ def generate_moves():
                         j += 1
                 moves.extend(add_moves)
                 continue
-            elif square & piece.pawn == piece.pawn:
+            elif square % piece.white == piece.pawn:
                 if i // 8 != 7:
                     add_moves = []
                     # Non capture moves
@@ -780,7 +780,7 @@ def generate_moves():
                     # Check for enpassant if there was a previous move
                     if last_move:
                         # Check if double step was made by a pawn
-                        if last_move[2] & piece.pawn == piece.pawn:
+                        if last_move[2] % piece.white == piece.pawn:
                             if last_move[0] == i+17 and last_move[1] == i+1:
                                 add_moves.append([i, i+9, i+1])
                             elif last_move[0] == i+15 and last_move[1] == i-1:
