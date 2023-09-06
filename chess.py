@@ -20,8 +20,6 @@ moves = []
 '''Array of possible moves'''
 last_move = []
 '''Last move taken by previous player:[source, destination, piece]'''
-must_promote = []
-'''Array used as boolean to indicate if promote() function must be called to promote a pawn on said square'''
 over = 0
 '''Who won\nNone: 0\nWhite: piece.white\nBlack: piece.black\nDraw: piece.draw'''
 
@@ -115,26 +113,42 @@ def startBoardFromFen(fen_string:str, first_turn:int,
             x += 1
             y += x//8
             x %= 8
+    
+    # Change castling booleans
+    if board[60] != piece.white | piece.king:
+        Km = True
+    if board[63] != piece.white | piece.rook:
+        Rrm = True
+    if board[56] != piece.white | piece.rook:
+        Rlm = True
+    if board[4] != piece.black | piece.king:
+        km = True
+    if board[7] != piece.black | piece.rook:
+        rrm = True
+    if board[0] != piece.black | piece.rook:
+        rlm = True
+    
     generate_legal_moves()
     return
 
 def play(move:list[int]):
     '''Plays a move on the board array'''
     # Is there a promotion to be made?
-    global must_promote, last_move, Km, Rrm, Rlm, km, rrm, rlm, turn, over
-    if must_promote:
-        print("Must promote on square:", must_promote)
-    elif over:
+    global moves, last_move, Km, Rrm, Rlm, km, rrm, rlm, turn, over
+    if over:
         print("Game is already over")
     else:
         board[move[1]] = board[move[0]]
         board[move[0]] = 0
         last_move = [move[0], move[1], board[move[1]]]
-        if len(move) == 3:
+        if len(move) == 3: # En passant
             board[move[2]] = 0
-        if len(move) == 4:
+        if len(move) == 4: # Castling
             board[move[3]] = board[move[2]]
             board[move[2]] = 0
+        if len(move) == 5: # Promotion
+            color = piece.white if board[move[1]] & piece.white == piece.white else piece.black
+            board[move[1]] = move[4] | color
         if not Km: # Update castling booleans for White
             if last_move[2] == piece.king | piece.white:
                 Km = True
@@ -157,13 +171,11 @@ def play(move:list[int]):
                 if last_move[2] == piece.rook | piece.black:
                     if last_move[0] == 0:
                         rlm = True
-        if (last_move[2] == piece.white | piece.pawn and last_move[1] // 8 == 0) or (last_move[2] == piece.black | piece.pawn and last_move[1] // 8 == 7):
-            must_promote = [last_move[1]]
+        moves = []
+        if turn == piece.white:
+            turn = piece.black
         else:
-            if turn == piece.white:
-                turn = piece.black
-            else:
-                turn = piece.white
+            turn = piece.white
         generate_legal_moves()
     return
 
@@ -172,31 +184,15 @@ def _play(move:list[int], new_board:list[int]):
     new_board[move[1]] = new_board[move[0]]
     new_board[move[0]] = 0
     last_move = [move[0], move[1], new_board[move[1]]]
-    if len(move) == 3:
+    if len(move) == 3: # En passant
         new_board[move[2]] = 0
-    if len(move) == 4:
+    if len(move) == 4: # Castling
         new_board[move[3]] = new_board[move[2]]
         new_board[move[2]] = 0
+    if len(move) == 5: # Promotion
+            color = piece.white if new_board[move[1]] & piece.white == piece.white else piece.black
+            new_board[move[1]] = move[4] | color
     return new_board
-
-def promote(new_piece:int):
-    '''Promotes the piece on must_promote square with the given value'''
-    global piece, must_promote, turn
-    print(new_piece)
-    if must_promote:
-        if new_piece in [2, 3, 4, 5]:
-            color = piece.black if board[must_promote[0]] > 15 else piece.white
-            board[must_promote[0]] = new_piece | color
-            must_promote = []
-            if turn == piece.white:
-                turn = piece.black
-            else:
-                turn = piece.white
-        else:
-            raise ValueError("piece must be defined using valid pieces constants such as piece.queen")
-    else:
-        raise RuntimeError("This must be called only when must_promote is True")
-    return
 
 def generate_moves():
     '''
@@ -491,6 +487,14 @@ def generate_moves():
                                 add_moves.append([i, i-9, i-1])
                             elif last_move[0] == i-15 and last_move[1] == i+1:
                                 add_moves.append([i, i-7, i+1])
+                    # Add promotion moves
+                    for j in range(len(add_moves)):
+                        add_move = add_moves[0]
+                        if add_move[1] // 8 == 0:
+                            src = add_move[0]
+                            dest = add_move[1]
+                            add_moves.pop(0)
+                            add_moves.extend([[src, dest, 0, 0, 2], [src, dest, 0, 0, 3], [src, dest, 0, 0, 4], [src, dest, 0, 0, 5]])
                     # Remove moves that would capture white pieces
                     j = 0
                     while j < len(add_moves):
@@ -781,6 +785,14 @@ def generate_moves():
                                 add_moves.append([i, i+9, i+1])
                             elif last_move[0] == i+15 and last_move[1] == i-1:
                                 add_moves.append([i, i+7, i-1])
+                    # Add promotion moves
+                    for j in range(len(add_moves)):
+                        add_move = add_moves[0]
+                        if add_move[1] // 8 == 7:
+                            src = add_move[0]
+                            dest = add_move[1]
+                            add_moves.pop(0)
+                            add_moves.extend([[src, dest, 0, 0, 2], [src, dest, 0, 0, 3], [src, dest, 0, 0, 4], [src, dest, 0, 0, 5]])
                     # Remove moves that would capture black pieces
                     j = 0
                     while j < len(add_moves):
@@ -798,7 +810,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
     Returns a list of possible moves.
     Used to check for non legal moves.
     '''
-    nmoves = []
+    moves = []
     for i in range(len(board)):
         square = board[i]
         if square & turn == piece.white:
@@ -815,12 +827,6 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                         add_moves.pop(j)
                     else:
                         j += 1
-                # Check for castling
-                if not Km:
-                    if not Rrm and board[i+1] == 0 and board[i+2] == 0:
-                        add_moves.append([i, i+2, i+3, i+1])
-                    if not Rlm and board[i-1] == 0 and board[i-2] == 0 and board[i-3] == 0:
-                        add_moves.append([i, i-2, i-4, i-1])
                 # Remove moves that would capture white pieces
                 j = 0
                 while j < len(add_moves):
@@ -828,7 +834,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                         add_moves.pop(j)
                     else:
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.queen == piece.queen:
                 add_moves = []
@@ -929,7 +935,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                     else:
                         add_moves.append([i, i-j*7])
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.rook == piece.rook:
                 add_moves = []
@@ -982,7 +988,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                     else:
                         add_moves.append([i, i-j*8])
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.knight == piece.knight:
                 add_moves = [
@@ -1006,7 +1012,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                         add_moves.pop(j)
                     else:
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.bishop == piece.bishop:
                 add_moves = []
@@ -1059,29 +1065,16 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                     else:
                         add_moves.append([i, i-j*7])
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.pawn == piece.pawn:
                 if i // 8 != 0:
                     add_moves = []
-                    # Non capture moves
-                    if board[i-8] == 0:
-                        add_moves.append([i, i-8])
-                        if i//8 == 6 and board[i-16] == 0:
-                            add_moves.append([i, i-16])
                     # Capture moves
                     if board[i-7] != 0:
                         add_moves.append([i, i-7])
                     if board[i-9] != 0:
-                        add_moves.append([i, i-9])                    
-                    # Check for enpassant if there was a previous move
-                    if last_move:
-                        # Check if double step was made by a pawn
-                        if last_move[2] & piece.pawn == piece.pawn:
-                            if last_move[0] == i-17 and last_move[1] == i-1:
-                                add_moves.append([i, i-9, i-1])
-                            elif last_move[0] == i-15 and last_move[1] == i+1:
-                                add_moves.append([i, i-7, i+1])
+                        add_moves.append([i, i-9])
                     # Remove moves that would capture white pieces
                     j = 0
                     while j < len(add_moves):
@@ -1089,7 +1082,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                             add_moves.pop(j)
                         else:
                             j += 1
-                    nmoves.extend(add_moves)
+                    moves.extend(add_moves)
                 continue
         elif square & turn == piece.black:
             # Generate moves for each piece
@@ -1105,12 +1098,6 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                         add_moves.pop(j)
                     else:
                         j += 1
-                # Check for castling
-                if not km:
-                    if not rrm and board[i+1] == 0 and board[i+2] == 0:
-                        add_moves.append([i, i+2, i+3, i+1])
-                    if not rlm and board[i-1] == 0 and board[i-2] == 0 and board[i-3] == 0:
-                        add_moves.append([i, i-2, i-4, i-1])
                 # Remove moves that would capture black pieces
                 j = 0
                 while j < len(add_moves):
@@ -1118,7 +1105,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                         add_moves.pop(j)
                     else:
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.queen == piece.queen:
                 add_moves = []
@@ -1219,7 +1206,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                     else:
                         add_moves.append([i, i-j*7])
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.rook == piece.rook:
                 add_moves = []
@@ -1272,7 +1259,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                     else:
                         add_moves.append([i, i-j*8])
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.knight == piece.knight:
                 add_moves = [
@@ -1296,7 +1283,7 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                         add_moves.pop(j)
                     else:
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.bishop == piece.bishop:
                 add_moves = []
@@ -1349,29 +1336,16 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                     else:
                         add_moves.append([i, i-j*7])
                         j += 1
-                nmoves.extend(add_moves)
+                moves.extend(add_moves)
                 continue
             elif square & piece.pawn == piece.pawn:
                 if i // 8 != 7:
                     add_moves = []
-                    # Non capture moves
-                    if board[i+8] == 0:
-                        add_moves.append([i, i+8])
-                        if i//8 == 1 and board[i+16] == 0:
-                            add_moves.append([i, i+16])
                     # Capture moves
                     if board[i+7] != 0:
                         add_moves.append([i, i+7])
                     if board[i+9] != 0:
-                        add_moves.append([i, i+9])                    
-                    # Check for enpassant if there was a previous move
-                    if last_move:
-                        # Check if double step was made by a pawn
-                        if last_move[2] & piece.pawn == piece.pawn:
-                            if last_move[0] == i+17 and last_move[1] == i+1:
-                                add_moves.append([i, i+9, i+1])
-                            elif last_move[0] == i+15 and last_move[1] == i-1:
-                                add_moves.append([i, i+7, i-1])
+                        add_moves.append([i, i+9])
                     # Remove moves that would capture black pieces
                     j = 0
                     while j < len(add_moves):
@@ -1379,9 +1353,9 @@ def _generate_moves(turn:int, board:list[int]): #TODO
                             add_moves.pop(j)
                         else:
                             j += 1
-                    nmoves.extend(add_moves)
+                    moves.extend(add_moves)
                 continue
-    return nmoves
+    return moves
     
 def generate_legal_moves():
     '''Removes moves that result in possible capture of allied king'''
@@ -1410,12 +1384,16 @@ def generate_legal_moves():
             new_move = new_moves[j]
             if turn == piece.white:
                 if new_board[new_move[1]] == piece.king | piece.white:
-                    legal = False
+                    # Pawn bug fix
+                    if not ((new_board[new_move[0]] % piece.white == piece.pawn) and (new_move[0]+8 == new_move[1])):
+                        legal = False
                 if len(test_move) == 4 and new_move[1] == 60:
                     legal = False
             else:
                 if new_board[new_move[1]] == piece.king | piece.black:
-                    legal = False
+                    # Pawn bug fix
+                    if not ((new_board[new_move[0]] % piece.white == piece.pawn) and (new_move[0]-8 == new_move[1])):
+                        legal = False
                 if len(test_move) == 4 and new_move[1] == 4:
                     legal = False
             if len(test_move) == 4:
@@ -1432,9 +1410,9 @@ def generate_legal_moves():
             new_moves = _generate_moves(piece.black, board)
             draw = True
             for new_move in new_moves:
-                if new_move[1] == piece.white | piece.king:
+                if board[new_move[1]] == piece.white | piece.king:
                     draw = False
-            if not draw:
+            if draw:
                 over = piece.draw
             else:
                 over = piece.black
@@ -1442,9 +1420,9 @@ def generate_legal_moves():
             new_moves = _generate_moves(piece.white, board)
             draw = True
             for new_move in new_moves:
-                if new_move[1] == piece.black | piece.king:
+                if board[new_move[1]] == piece.black | piece.king:
                     draw = False
-            if not draw:
+            if draw:
                 over = piece.draw
             else:
                 over = piece.white

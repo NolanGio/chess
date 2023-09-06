@@ -1,37 +1,298 @@
-import chess
-
-def draw():
-    for y in range(8):
-        row = []
-        for x in range(8):
-            row.append(chess.board[x + y * 8])
-        print(row)
-
 def main():
+    import pygame, chess
+    pygame.init()
+
+    # Variables
+    active_squares = [[], [], []] # Last played move and current selected piece
+    available_moves = [] # All of the moves of the selected pieces
+    active_moves = [] # Non capture moves (for graphics)
+    active_captures = [] # Capture moves (for graphics)
+    size = 66 # Size of board squares
+    dragging = False # Used for dragging pieces and graphics
+    playing = True # Is there a game being played
+    timer = pygame.time.get_ticks() # Used for dragging
+    start_pos = pygame.mouse.get_pos() # Used for dragging
+    promoting = False # If the player must promote
+    promote = [] # src and dest of selected promoting move
+    width, height =  530, 530
+
+    # SETUP SURFACES --------------------------------------------------------------------------
+    piece_size = 69 # size of piece images for scaling
+    board = pygame.image.load("assets/board.png")
+    Pimg = pygame.transform.scale(pygame.image.load("assets/wp.png"), (piece_size, piece_size))
+    pimg = pygame.transform.scale(pygame.image.load("assets/bp.png"), (piece_size, piece_size))
+    Bimg = pygame.transform.scale(pygame.image.load("assets/wb.png"), (piece_size, piece_size))
+    bimg = pygame.transform.scale(pygame.image.load("assets/bb.png"), (piece_size, piece_size))
+    Nimg = pygame.transform.scale(pygame.image.load("assets/wn.png"), (piece_size, piece_size))
+    nimg = pygame.transform.scale(pygame.image.load("assets/bn.png"), (piece_size, piece_size))
+    Rimg = pygame.transform.scale(pygame.image.load("assets/wr.png"), (piece_size, piece_size))
+    rimg = pygame.transform.scale(pygame.image.load("assets/br.png"), (piece_size, piece_size))
+    Qimg = pygame.transform.scale(pygame.image.load("assets/wq.png"), (piece_size, piece_size))
+    qimg = pygame.transform.scale(pygame.image.load("assets/bq.png"), (piece_size, piece_size))
+    Kimg = pygame.transform.scale(pygame.image.load("assets/wk.png"), (piece_size, piece_size))
+    kimg = pygame.transform.scale(pygame.image.load("assets/bk.png"), (piece_size, piece_size))
+
+    # Stuff used for promoting
+    Brect = bimg.get_rect(topleft = (width/2 - piece_size*2, height/2-piece_size/2))
+    Nrect = nimg.get_rect(topleft = (width/2 - piece_size, height/2-piece_size/2))
+    Rrect = rimg.get_rect(topleft = (width/2, height/2-piece_size/2))
+    Qrect = qimg.get_rect(topleft = (width/2 + piece_size, height/2-piece_size/2))
+    GRAY = (60, 60, 60)
+    menu_font = pygame.font.SysFont("Arial", 50, False, False)
+    cancel_surf = menu_font.render("X", False, GRAY)
+    cancel_rect = cancel_surf.get_rect(topleft=(width/2+piece_size*2, height/2-size/2))
+    
+    # Yellow squares
+    active_surf = pygame.Surface((67, 67))
+    active_surf.fill((255, 255, 0))
+    active_surf.set_alpha(128)
+
+    # Black dots
+    move_surf = pygame.Surface((67, 67), pygame.SRCALPHA)
+    pygame.draw.circle(move_surf, (0, 0, 0), (33, 33), 10, width=0)
+    move_surf.set_alpha(64)
+
+    # Black circles
+    capture_surf = pygame.Surface((67, 67), pygame.SRCALPHA)
+    pygame.draw.circle(capture_surf, (0, 0, 0), (33, 33), 30, width=4)
+    capture_surf.set_alpha(64)
+
+    # Fonts
+    promotion_font = pygame.font.SysFont("Arial", 24, False, False)
+    game_font = pygame.font.SysFont("Arial", 50, False, False)
+    font_color = (0, 0, 0)
+
     chess.startBoardFromFen(
-    "rnbqkbnrpppppppp////PPPPPPPPRNBQKBNR",
-    chess.piece.white)
-    print("Moves:", chess.moves, "\n")
+        "rnbqkbnrpppppppp////PPPPPPPPRNBQKBNR",
+        chess.piece.white)
+
+    def Draw_pieces(screen):
+        '''Draws the pieces of the board array'''
+        for i in range(len(chess.board)):
+            square = chess.board[i]
+            if square == chess.piece.white | chess.piece.pawn:
+                screen.blit(Pimg, (i%8*66, i//8*66))
+            if square == chess.piece.white | chess.piece.bishop:
+                screen.blit(Bimg, (i%8*66, i//8*66))
+            if square == chess.piece.white | chess.piece.knight:
+                screen.blit(Nimg, (i%8*66, i//8*66))
+            if square == chess.piece.white | chess.piece.rook:
+                screen.blit(Rimg, (i%8*66, i//8*66))
+            if square == chess.piece.white | chess.piece.queen:
+                screen.blit(Qimg, (i%8*66, i//8*66))
+            if square == chess.piece.white | chess.piece.king:
+                screen.blit(Kimg, (i%8*66, i//8*66))
+            if square == chess.piece.black | chess.piece.pawn:
+                screen.blit(pimg, (i%8*66, i//8*66))
+            if square == chess.piece.black | chess.piece.bishop:
+                screen.blit(bimg, (i%8*66, i//8*66))
+            if square == chess.piece.black | chess.piece.knight:
+                screen.blit(nimg, (i%8*66, i//8*66))
+            if square == chess.piece.black | chess.piece.rook:
+                screen.blit(rimg, (i%8*66, i//8*66))
+            if square == chess.piece.black | chess.piece.queen:
+                screen.blit(qimg, (i%8*66, i//8*66))
+            if square == chess.piece.black | chess.piece.king:
+                screen.blit(kimg, (i%8*66, i//8*66))
+
+    def Draw_on_mouse(screen, active_squares):
+        '''Draws a piece on the mouse if it is being dragged'''
+        square = chess.board[active_squares[2][0]+active_squares[2][1]*8]
+        if square == chess.piece.white | chess.piece.pawn:
+            screen.blit(Pimg, Pimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.white | chess.piece.bishop:
+            screen.blit(Bimg, Bimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.white | chess.piece.knight:
+            screen.blit(Nimg, Nimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.white | chess.piece.rook:
+            screen.blit(Rimg, Rimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.white | chess.piece.queen:
+            screen.blit(Qimg, Qimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.white | chess.piece.king:
+            screen.blit(Kimg, Kimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.black | chess.piece.pawn:
+            screen.blit(pimg, pimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.black | chess.piece.bishop:
+            screen.blit(bimg, bimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.black | chess.piece.knight:
+            screen.blit(nimg, nimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.black | chess.piece.rook:
+            screen.blit(rimg, rimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.black | chess.piece.queen:
+            screen.blit(qimg, qimg.get_rect(center=pygame.mouse.get_pos()))
+        if square == chess.piece.black | chess.piece.king:
+            screen.blit(kimg, kimg.get_rect(center=pygame.mouse.get_pos()))
+
+    def distance(point1, point2):
+        # Used for dragging
+        return ((point2[0]-point1[0])**2+(point2[1]-point1[1])**2)**0.5
+
+    # set up the window
+    screen = pygame.display.set_mode((width, height))
+    pygame.display.set_caption("Chess")
+
+    # main loop
     run = True
     while run:
-        draw()
-        command = input("Enter command: ")
-        if command == "q":
-            run = False
-        elif command:
-            command = [int(word.strip()) for word in command.split()]
-            print("\n\n")
-            if len(command) == 1:
-                chess.promote(command[0])
+        # EVENTS ----------------------------------------------------------------------------
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    if chess.must_promote:
+                        chess.promote(2)
+                if event.key == pygame.K_2:
+                    if chess.must_promote:
+                        chess.promote(3)
+                if event.key == pygame.K_3:
+                    if chess.must_promote:
+                        chess.promote(4)
+                if event.key == pygame.K_4:
+                    if chess.must_promote:
+                        chess.promote(5)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                x_pos, y_pos = pos
+                if not chess.over and playing and not promoting:
+                    x = x_pos // size
+                    y = y_pos // size
+                    # Check if the clicked square can be played from the selected square
+                    if x+y*8 in available_moves:
+                        src = active_squares[2][0]+active_squares[2][1]*8
+                        dest = x+y*8
+                        for move in chess.moves:
+                            if move[0] == src and move[1] == dest:
+                                if len(move) == 5:
+                                    promoting = True
+                                    promote = [src, dest]
+                                else:
+                                    chess.play(move)
+                                    active_squares[0] = [src%8, src//8]
+                                    active_squares[1] = [dest%8, dest//8]
+                                    active_squares[2] = []
+                    
+                    # Clear all effects
+                    available_moves = []
+                    active_moves = []
+                    active_captures = []
+
+                    # Add effects and available moves
+                    if x+y*8 < 64:
+                        if chess.board[x+y*8] & chess.turn == chess.turn:
+                            active_squares[2] = [x, y]
+                            for move in chess.moves:
+                                if move[0] == x+y*8:
+                                    if chess.board[move[1]] == 0:
+                                        active_moves.append(move[1])
+                                        if len(move) == 3:
+                                            active_captures.append(move[1])
+                                    else:
+                                        active_captures.append(move[1])
+                            dragging, timer, start_pos = True, pygame.time.get_ticks() + 100, pygame.mouse.get_pos()
+                    available_moves.extend(active_moves)
+                    available_moves.extend(active_captures)
+                if promoting:
+                    if cancel_rect.collidepoint(x_pos, y_pos):
+                        promoting, promote = False, []
+                    elif Brect.collidepoint(x_pos, y_pos):
+                        promoting = False
+                        chess.play([promote[0], promote[1], 0, 0, 2])
+                        promote = []
+                    elif Nrect.collidepoint(x_pos, y_pos):
+                        promoting = False
+                        chess.play([promote[0], promote[1], 0, 0, 3])
+                        promote = []
+                    elif Rrect.collidepoint(x_pos, y_pos):
+                        promoting = False
+                        chess.play([promote[0], promote[1], 0, 0, 4])
+                        promote = []
+                    elif Qrect.collidepoint(x_pos, y_pos):
+                        promoting = False
+                        chess.play([promote[0], promote[1], 0, 0, 5])
+                        promote = []
+            if event.type == pygame.MOUSEBUTTONUP:
+                # Try to play dragging move if there was a time delay since dragging start and the piece was moved on dragging
+                if dragging and timer < pygame.time.get_ticks() and distance(start_pos, pygame.mouse.get_pos()) > 10:
+                    pos = pygame.mouse.get_pos()
+                    x_pos, y_pos = pos
+                    if not chess.over and playing and not promoting:
+                        x = x_pos // size
+                        y = y_pos // size
+                        if x+y*8 in available_moves:
+                            src = active_squares[2][0]+active_squares[2][1]*8
+                            dest = x+y*8
+                            for move in chess.moves:
+                                if move[0] == src and move[1] == dest:
+                                    if len(move) == 5:
+                                        promoting = True
+                                        promote = [src, dest]
+                                    else:
+                                        chess.play(move)
+                                        active_squares[0] = [src%8, src//8]
+                                        active_squares[1] = [dest%8, dest//8]
+                                        active_squares[2] = []
+                        available_moves = []
+                        active_moves = []
+                        active_captures = []
+                dragging = False
+                
+        # DRAW ----------------------------------------------------------------------------------
+
+        # Draw the board and square effects
+        screen.fill("#5F5F5F")
+        screen.blit(board, (0, 0))
+        for active in active_squares:
+            if active:
+                x, y = active[0], active[1]
+                screen.blit(active_surf, (x*size+1, y*size+1))
+        for active in active_moves:
+            x, y = active%8, active//8
+            screen.blit(move_surf, (x*size+1, y*size+1))
+        for active in active_captures:
+            x, y = active%8, active//8
+            screen.blit(capture_surf, (x*size+1, y*size+1))
+        
+        # Draw pieces
+        Draw_pieces(screen)
+        
+        # Draw piece on mouse if dragging
+        if dragging and timer < pygame.time.get_ticks() and distance(start_pos, pygame.mouse.get_pos()) > 10:
+            x, y = active_squares[2][0], active_squares[2][1]
+            screen.blit(active_surf, (x*size+1, y*size+1))
+            Draw_on_mouse(screen, active_squares)
+        
+        # Draw game over
+        if chess.over:
+            if chess.over == chess.piece.white:
+                text = game_font.render("White wins", False, font_color)
+            elif chess.over == chess.piece.black:
+                text = game_font.render("Black wins", False, font_color)
             else:
-                chess.play(command)
-                chess.generate_legal_moves()
-                print("Moves:", chess.moves)
-                print("Winner:", chess.over, "\n")
+                text = game_font.render("Stalemate", False, font_color)
+            text_rect = text.get_rect(center=(width/2,height/2))
+            pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(width/2-text_rect.width/2-5, height/2-text_rect.height/2-5, text_rect.width+10, text_rect.height+10), 0, 20)
+            screen.blit(text, text_rect)
+        if promoting:
+            pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(width/2-piece_size*2, height/2-piece_size/2, piece_size*4+40, piece_size), 0, 20)
+            screen.blit(cancel_surf, cancel_rect)
 
-    return
+            if chess.turn == chess.piece.white:
+                screen.blit(Bimg, Brect)
+                screen.blit(Nimg, Nrect)
+                screen.blit(Rimg, Rrect)
+                screen.blit(Qimg, Qrect)
+            else:
+                screen.blit(bimg, Brect)
+                screen.blit(nimg, Nrect)
+                screen.blit(rimg, Rrect)
+                screen.blit(qimg, Qrect)
 
+        # Show
+        pygame.display.flip()
 
+    # Exit
+    pygame.quit()
 
 if __name__ == "__main__":
     main()
