@@ -138,19 +138,6 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_1:
-                    if chess.must_promote:
-                        chess.promote(2)
-                if event.key == pygame.K_2:
-                    if chess.must_promote:
-                        chess.promote(3)
-                if event.key == pygame.K_3:
-                    if chess.must_promote:
-                        chess.promote(4)
-                if event.key == pygame.K_4:
-                    if chess.must_promote:
-                        chess.promote(5)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
                 x_pos, y_pos = pos

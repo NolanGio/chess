@@ -1,4 +1,5 @@
 '''Chess engine'''
+import const
 
 class piece:
     '''Constants related to pieces for gameboard and movement logic'''
@@ -1427,6 +1428,49 @@ def generate_legal_moves():
             else:
                 over = piece.white
     return
+
+def score(turn:int, board:list[int]):
+    '''Returns a score for the *turn* player on *board* state. Used for minimax AI.'''
+    score = 0
+    # Change according to who is being evaluated
+    player = 1
+    if turn == piece.black:
+        player = -1
+    
+    # Loop through all squares
+    for i in range(len(board)):
+        square = board[i]
+        p_value = square % piece.white
+        p_score = 0
+        if square & piece.white:
+            if p_value == piece.king:
+                p_score = const.king + const.kingEvalWhite[i]
+            if p_value == piece.queen:
+                p_score = const.queen + const.queenEval[i]
+            if p_value == piece.rook:
+                p_score = const.rook + const.rookEvalWhite[i]
+            if p_value == piece.knight:
+                p_score = const.knight + const.knightEval[i]
+            if p_value == piece.bishop:
+                p_score = const.bishop + const.bishopEvalWhite[i]
+            if p_value == piece.pawn:
+                p_score = const.pawn + const.pawnEvalWhite[i]
+        elif square & piece.black:
+            if p_value == piece.king:
+                p_score = (const.king + const.kingEvalBlack[i]) * -1
+            if p_value == piece.queen:
+                p_score = (const.queen + const.queenEval[i]) * -1
+            if p_value == piece.rook:
+                p_score = (const.rook + const.rookEvalBlack[i]) * -1
+            if p_value == piece.knight:
+                p_score = (const.knight + const.knightEval[i]) * -1
+            if p_value == piece.bishop:
+                p_score = (const.bishop + const.bishopEvalBlack[i]) * -1
+            if p_value == piece.pawn:
+                p_score = (const.pawn + const.pawnEvalBlack[i]) * -1
+        score += p_score * player
+    
+    return score
 
 def minimax(depth:int): #TODO
     '''Performs minimax selection of best move over *depth* moves'''
