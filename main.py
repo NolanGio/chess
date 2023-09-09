@@ -8,13 +8,17 @@ def main():
     active_moves = [] # Non capture moves (for graphics)
     active_captures = [] # Capture moves (for graphics)
     size = 66 # Size of board squares
-    dragging = False # Used for dragging pieces and graphics
-    playing = True # Is there a game being played
     timer = pygame.time.get_ticks() # Used for dragging
     start_pos = pygame.mouse.get_pos() # Used for dragging
-    promoting = False # If the player must promote
     promote = [] # src and dest of selected promoting move
     width, height =  530, 530
+
+    # Booleans
+    ai_white = False # Is white an AI
+    ai_black = False # Is black an AI
+    dragging = False # Used for dragging pieces and graphics
+    playing = False # Is there a game being played
+    promoting = False # If the player must promote
 
     # SETUP SURFACES --------------------------------------------------------------------------
     piece_size = 69 # size of piece images for scaling
@@ -32,15 +36,20 @@ def main():
     Kimg = pygame.transform.scale(pygame.image.load("assets/wk.png"), (piece_size, piece_size))
     kimg = pygame.transform.scale(pygame.image.load("assets/bk.png"), (piece_size, piece_size))
 
+    # Fonts
+    promotion_font = pygame.font.Font("assets/arial.ttf", 24)
+    game_font = pygame.font.Font("assets/arial.ttf", 50)
+    title_font = pygame.font.Font("assets/arial.ttf", 75)
+
     # Stuff used for promoting
     Brect = bimg.get_rect(topleft = (width/2 - piece_size*2, height/2-piece_size/2))
     Nrect = nimg.get_rect(topleft = (width/2 - piece_size, height/2-piece_size/2))
     Rrect = rimg.get_rect(topleft = (width/2, height/2-piece_size/2))
     Qrect = qimg.get_rect(topleft = (width/2 + piece_size, height/2-piece_size/2))
-    GRAY = (60, 60, 60)
-    menu_font = pygame.font.Font("assets/arial.ttf", 50)
-    cancel_surf = menu_font.render("X", False, GRAY)
-    cancel_rect = cancel_surf.get_rect(topleft=(width/2+piece_size*2, height/2-size/2))
+    GRAY = (180, 180, 180)
+    
+    cancel_surf = promotion_font.render("X", False, GRAY)
+    cancel_rect = cancel_surf.get_rect(center=(width/2+piece_size*2.2, height/2))
     
     # Yellow squares
     active_surf = pygame.Surface((67, 67))
@@ -57,10 +66,7 @@ def main():
     pygame.draw.circle(capture_surf, (0, 0, 0), (33, 33), 30, width=4)
     capture_surf.set_alpha(64)
 
-    # Fonts
-    promotion_font = pygame.font.Font("assets/arial.ttf", 24)
-    game_font = pygame.font.Font("assets/arial.ttf", 50)
-    font_color = (0, 0, 0)
+    
 
     chess.startBoardFromFen(
         "rnbqkbnrpppppppp////PPPPPPPPRNBQKBNR",
@@ -141,7 +147,19 @@ def main():
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
                 x_pos, y_pos = pos
-                if not chess.over and playing and not promoting:
+                if play2_rect.collidepoint(*pygame.mouse.get_pos()) and not playing:
+                    ai_white = False
+                    ai_black = False
+                    playing = True
+                if playw_rect.collidepoint(*pygame.mouse.get_pos()) and not playing:
+                    ai_white = False
+                    ai_black = True
+                    playing = True
+                if playb_rect.collidepoint(*pygame.mouse.get_pos()) and not playing:
+                    ai_white = True
+                    ai_black = False
+                    playing = True
+                if not chess.over and playing and not promoting and (not (ai_white and chess.turn == chess.piece.white)) and (not (ai_black and chess.turn == chess.piece.black)):
                     x = x_pos // size
                     y = y_pos // size
                     # Check if the clicked square can be played from the selected square
@@ -223,7 +241,7 @@ def main():
                         active_moves = []
                         active_captures = []
                 dragging = False
-                
+        
         # DRAW ----------------------------------------------------------------------------------
 
         # Draw the board and square effects
@@ -251,12 +269,14 @@ def main():
         
         # Draw game over
         if chess.over:
+            ai_white = False
+            ai_black = False
             if chess.over == chess.piece.white:
-                text = game_font.render("White wins", False, font_color)
+                text = game_font.render("White wins", False, (0, 0, 0))
             elif chess.over == chess.piece.black:
-                text = game_font.render("Black wins", False, font_color)
+                text = game_font.render("Black wins", False, (0, 0, 0))
             else:
-                text = game_font.render("Stalemate", False, font_color)
+                text = game_font.render("Stalemate", False, (0, 0, 0))
             text_rect = text.get_rect(center=(width/2,height/2))
             pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(width/2-text_rect.width/2-5, height/2-text_rect.height/2-5, text_rect.width+10, text_rect.height+10), 0, 20)
             screen.blit(text, text_rect)
@@ -274,9 +294,41 @@ def main():
                 screen.blit(nimg, Nrect)
                 screen.blit(rimg, Rrect)
                 screen.blit(qimg, Qrect)
+        if not playing:
+            title = title_font.render("Chess", False, (0, 0, 0))
+            title_rect = title.get_rect(midtop=(width/2,size/2))
+            play2 = game_font.render("2 Players", False, (0, 0, 0))
+            play2_rect = play2.get_rect(midtop=(width/2,height/2))
+            playw_rect = Bimg.get_rect(midbottom=(width/2-size*0.55,height/2))
+            playb_rect = Bimg.get_rect(midbottom=(width/2+size*0.55,height/2))
+            pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(title_rect.x - 5, title_rect.y - 5, title_rect.width + 5, title_rect.height + 5), 0, 20)
+            screen.blit(title, title_rect)
+            pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(size*2, size*3-5, size*4, size*2+5), 0, 20)
+
+            # Hover effect on buttons
+            if play2_rect.collidepoint(*pygame.mouse.get_pos()):
+                pygame.draw.rect(screen, GRAY, play2_rect)
+            if playw_rect.collidepoint(*pygame.mouse.get_pos()):
+                pygame.draw.rect(screen, GRAY, playw_rect)
+            if playb_rect.collidepoint(*pygame.mouse.get_pos()):
+                pygame.draw.rect(screen, GRAY, playb_rect)
+            
+            # Draw buttons
+            screen.blit(play2, play2_rect)
+            screen.blit(Kimg, playw_rect)
+            screen.blit(kimg, playb_rect)
 
         # Show
         pygame.display.flip()
+
+        # AI play -------------------------------------------------------------------------------
+
+        if ai_white and chess.turn == chess.piece.white:
+            chess.ai_play()
+            active_squares = [[chess.last_move[0]%8, chess.last_move[0]//8], [chess.last_move[1]%8, chess.last_move[1]//8], []]
+        if ai_black and chess.turn == chess.piece.black:
+            chess.ai_play()
+            active_squares = [[chess.last_move[0]%8, chess.last_move[0]//8], [chess.last_move[1]%8, chess.last_move[1]//8], []]
 
     # Exit
     pygame.quit()

@@ -1,5 +1,5 @@
 '''Chess engine'''
-import const
+import const, random, math
 
 class piece:
     '''Constants related to pieces for gameboard and movement logic'''
@@ -180,11 +180,11 @@ def play(move:list[int]):
         generate_legal_moves()
     return
 
-def _play(move:list[int], new_board:list[int]):
+def _play(move:list[int], board:list[int]):
     '''Same as play but for legal moves generation'''
+    new_board = board.copy()
     new_board[move[1]] = new_board[move[0]]
     new_board[move[0]] = 0
-    last_move = [move[0], move[1], new_board[move[1]]]
     if len(move) == 3: # En passant
         new_board[move[2]] = 0
     if len(move) == 4: # Castling
@@ -1429,13 +1429,79 @@ def generate_legal_moves():
                 over = piece.white
     return
 
-def score(turn:int, board:list[int]):
+def _generate_legal_moves(turn, board):
+    '''Used for minimax moves'''
+
+    moves = _generate_moves(turn, board)
+    over = 0
+
+    i = 0
+    while i < len(moves):
+        
+        # Loop through possible moves and play them
+        test_move = moves[i]
+        new_board = board.copy()
+        new_board = _play(test_move, new_board)
+        
+        # Generate moves for opponent
+        if turn == piece.white:
+            new_moves = _generate_moves(piece.black, new_board)
+        else:
+            new_moves = _generate_moves(piece.white, new_board)
+        j, legal = 0, True
+
+        # Loop for possible moves of opponent which end up in king's capture
+        while legal and j < len(new_moves):
+            new_move = new_moves[j]
+            if turn == piece.white:
+                if new_board[new_move[1]] == piece.king | piece.white:
+                    # Pawn bug fix
+                    if not ((new_board[new_move[0]] % piece.white == piece.pawn) and (new_move[0]+8 == new_move[1])):
+                        legal = False
+                if len(test_move) == 4 and new_move[1] == 60:
+                    legal = False
+            else:
+                if new_board[new_move[1]] == piece.king | piece.black:
+                    # Pawn bug fix
+                    if not ((new_board[new_move[0]] % piece.white == piece.pawn) and (new_move[0]-8 == new_move[1])):
+                        legal = False
+                if len(test_move) == 4 and new_move[1] == 4:
+                    legal = False
+            if len(test_move) == 4:
+                if new_move[1] == test_move[3]:
+                    legal = False
+
+            j += 1
+        if not legal:
+            moves.pop(i)
+        else:
+            i += 1
+    if len(moves) == 0:
+        if turn == piece.white:
+            new_moves = _generate_moves(piece.black, board)
+            draw = True
+            for new_move in new_moves:
+                if board[new_move[1]] == piece.white | piece.king:
+                    draw = False
+            if draw:
+                over = piece.draw
+            else:
+                over = piece.black
+        else:
+            new_moves = _generate_moves(piece.white, board)
+            draw = True
+            for new_move in new_moves:
+                if board[new_move[1]] == piece.black | piece.king:
+                    draw = False
+            if draw:
+                over = piece.draw
+            else:
+                over = piece.white
+    return moves, over
+
+def evaluate(board:list[int]):
     '''Returns a score for the *turn* player on *board* state. Used for minimax AI.'''
     score = 0
-    # Change according to who is being evaluated
-    player = 1
-    if turn == piece.black:
-        player = -1
     
     # Loop through all squares
     for i in range(len(board)):
@@ -1468,10 +1534,60 @@ def score(turn:int, board:list[int]):
                 p_score = (const.bishop + const.bishopEvalBlack[i]) * -1
             if p_value == piece.pawn:
                 p_score = (const.pawn + const.pawnEvalBlack[i]) * -1
-        score += p_score * player
+        score += p_score
     
     return score
 
-def minimax(depth:int): #TODO
-    '''Performs minimax selection of best move over *depth* moves'''
+def minimax(board:list[int], depth:int, alpha:int, beta:int, maximizing_player:bool): #TODO
+    
+    turn = piece.white if maximizing_player else piece.black
+    if depth == 0:
+        return evaluate(board)
+    
+    if maximizing_player:
+        max_eval = -math.inf
+        for move in _generate_moves(turn, board):
+            new_board = _play(move, board)
+            eval = minimax(new_board, depth - 1, alpha, beta, False)
+            max_eval = max(max_eval, eval)
+            alpha = max(alpha, eval)
+            if beta <= alpha:
+                break  # Alpha-beta pruning
+        return max_eval
+    else:
+        min_eval = math.inf
+        for move in _generate_moves(turn, board):
+            new_board = _play(move, board)
+            eval = minimax(new_board, depth - 1, alpha, beta, True)
+            min_eval = min(min_eval, eval)
+            beta = min(beta, eval)
+            if beta <= alpha:
+                break  # Alpha-beta pruning
+        return min_eval
+
+def ai_play():
+    '''AI plays the best move with minimax algorithm'''
+    global board, moves, turn
+    best_score = -math.inf
+    worst_score = math.inf
+    best_move = None
+    
+    if turn == piece.white:
+        for move in moves:
+            new_board = _play(move, board)
+            score = minimax(new_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing_player=False)
+            if score > best_score:
+                best_score = score
+                best_move = move
+    else:
+        for move in moves:
+            new_board = _play(move, board)
+            score = minimax(new_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing_player=True)
+            if score < worst_score:
+                worst_score = score
+                best_move = move
+    
+    if best_move == None:
+        best_move = moves[random.randint(0, len(moves)-1)]
+    play(best_move)
     return
