@@ -47,7 +47,7 @@ def startBoardFromFen(fen_string:str, first_turn:int,
     hrlm: has black king on left moved
     '''
     
-    global Km, Rrm, Rlm, km, rrm, rlm
+    global Km, Rrm, Rlm, km, rrm, rlm, over, board, turn
     # Assign castling booleans:
     Km, Rrm, Rlm, km, rrm, rlm = hKm, hRrm, hRlm, hkm, hrrm, hrlm
 
@@ -56,6 +56,10 @@ def startBoardFromFen(fen_string:str, first_turn:int,
         turn = first_turn
     else:
         raise ValueError("first turn must be defined using valid pieces constants such as piece.white or piece.black")
+    
+    # Clear board state
+    board = [0]*64
+    over = 0
 
     x, y = 0, 0 # Position on the board
     for char in fen_string:
@@ -1400,7 +1404,6 @@ def generate_legal_moves():
             if len(test_move) == 4:
                 if new_move[1] == test_move[3]:
                     legal = False
-
             j += 1
         if not legal:
             moves.pop(i)
@@ -1429,11 +1432,11 @@ def generate_legal_moves():
                 over = piece.white
     return
 
-def _generate_legal_moves(turn, board):
-    '''Used for minimax moves'''
+def _generate_legal_moves(turn:int, board:list[int]):
+    '''Used for minimax move generation.'''
 
+    # Generate moves 
     moves = _generate_moves(turn, board)
-    over = 0
 
     i = 0
     while i < len(moves):
@@ -1470,36 +1473,14 @@ def _generate_legal_moves(turn, board):
             if len(test_move) == 4:
                 if new_move[1] == test_move[3]:
                     legal = False
-
             j += 1
         if not legal:
             moves.pop(i)
         else:
             i += 1
-    if len(moves) == 0:
-        if turn == piece.white:
-            new_moves = _generate_moves(piece.black, board)
-            draw = True
-            for new_move in new_moves:
-                if board[new_move[1]] == piece.white | piece.king:
-                    draw = False
-            if draw:
-                over = piece.draw
-            else:
-                over = piece.black
-        else:
-            new_moves = _generate_moves(piece.white, board)
-            draw = True
-            for new_move in new_moves:
-                if board[new_move[1]] == piece.black | piece.king:
-                    draw = False
-            if draw:
-                over = piece.draw
-            else:
-                over = piece.white
-    return moves, over
+    return moves
 
-def evaluate(board:list[int]):
+def evaluate(player:int, board:list[int]):
     '''Returns a score for the *turn* player on *board* state. Used for minimax AI.'''
     score = 0
     
@@ -1536,19 +1517,29 @@ def evaluate(board:list[int]):
                 p_score = (const.pawn + const.pawnEvalBlack[i]) * -1
         score += p_score
     
+    if player == piece.black:
+        score *= -1
     return score
 
-def minimax(board:list[int], depth:int, alpha:int, beta:int, maximizing_player:bool): #TODO
+def minimax(player:int, turn:int, board:list[int], depth:int, alpha:int, beta:int, maximizing_player:bool): #TODO
+    '''Perform recursive selection of best move over *depth* plays'''
+
+    # Generate moves
+    moves = _generate_legal_moves(turn, board)
+    if turn == piece.white:
+        turn = piece.black
+    else:
+        turn = piece.white
     
-    turn = piece.white if maximizing_player else piece.black
-    if depth == 0:
-        return evaluate(board)
+
+    if depth == 0 or len(moves) == 0:
+        return evaluate(player, board)
     
     if maximizing_player:
         max_eval = -math.inf
-        for move in _generate_moves(turn, board):
+        for move in moves:
             new_board = _play(move, board)
-            eval = minimax(new_board, depth - 1, alpha, beta, False)
+            eval = minimax(player, turn, new_board, depth - 1, alpha, beta, False)
             max_eval = max(max_eval, eval)
             alpha = max(alpha, eval)
             if beta <= alpha:
@@ -1556,35 +1547,34 @@ def minimax(board:list[int], depth:int, alpha:int, beta:int, maximizing_player:b
         return max_eval
     else:
         min_eval = math.inf
-        for move in _generate_moves(turn, board):
+        for move in moves:
             new_board = _play(move, board)
-            eval = minimax(new_board, depth - 1, alpha, beta, True)
+            eval = minimax(player, turn, new_board, depth - 1, alpha, beta, True)
             min_eval = min(min_eval, eval)
             beta = min(beta, eval)
             if beta <= alpha:
                 break  # Alpha-beta pruning
         return min_eval
 
-def ai_play():
+def ai_play(player:int):
     '''AI plays the best move with minimax algorithm'''
     global board, moves, turn
     best_score = -math.inf
-    worst_score = math.inf
     best_move = None
-    
+
     if turn == piece.white:
         for move in moves:
             new_board = _play(move, board)
-            score = minimax(new_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing_player=False)
+            score = minimax(player, piece.black, new_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing_player=False)
             if score > best_score:
                 best_score = score
                 best_move = move
     else:
         for move in moves:
             new_board = _play(move, board)
-            score = minimax(new_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing_player=True)
-            if score < worst_score:
-                worst_score = score
+            score = minimax(player, piece.white, new_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing_player=False)
+            if score > best_score:
+                best_score = score
                 best_move = move
     
     if best_move == None:

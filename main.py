@@ -48,8 +48,11 @@ def main():
     Qrect = qimg.get_rect(topleft = (width/2 + piece_size, height/2-piece_size/2))
     GRAY = (180, 180, 180)
     
+    # Cancel buttons
     cancel_surf = promotion_font.render("X", False, GRAY)
     cancel_rect = cancel_surf.get_rect(center=(width/2+piece_size*2.2, height/2))
+    home_surf = title_font.render("X", False, (0, 0, 0))
+    home_rect = home_surf.get_rect(topright=(width, -5))
     
     # Yellow squares
     active_surf = pygame.Surface((67, 67))
@@ -147,18 +150,26 @@ def main():
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
                 x_pos, y_pos = pos
-                if play2_rect.collidepoint(*pygame.mouse.get_pos()) and not playing:
-                    ai_white = False
-                    ai_black = False
-                    playing = True
-                if playw_rect.collidepoint(*pygame.mouse.get_pos()) and not playing:
-                    ai_white = False
-                    ai_black = True
-                    playing = True
-                if playb_rect.collidepoint(*pygame.mouse.get_pos()) and not playing:
-                    ai_white = True
-                    ai_black = False
-                    playing = True
+                if not playing:
+                    if play2_rect.collidepoint(*pygame.mouse.get_pos()):
+                        ai_white = False
+                        ai_black = False
+                        playing = True
+                    if playw_rect.collidepoint(*pygame.mouse.get_pos()):
+                        ai_white = False
+                        ai_black = True
+                        playing = True
+                    if playb_rect.collidepoint(*pygame.mouse.get_pos()):
+                        ai_white = True
+                        ai_black = False
+                        playing = True
+                if chess.over:
+                    if home_rect.collidepoint(*pygame.mouse.get_pos()):
+                        chess.startBoardFromFen(
+                        "rnbqkbnrpppppppp////PPPPPPPPRNBQKBNR",
+                        chess.piece.white)
+                        playing = False
+                        active_squares = [[], [], []]
                 if not chess.over and playing and not promoting and (not (ai_white and chess.turn == chess.piece.white)) and (not (ai_black and chess.turn == chess.piece.black)):
                     x = x_pos // size
                     y = y_pos // size
@@ -280,6 +291,7 @@ def main():
             text_rect = text.get_rect(center=(width/2,height/2))
             pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(width/2-text_rect.width/2-5, height/2-text_rect.height/2-5, text_rect.width+10, text_rect.height+10), 0, 20)
             screen.blit(text, text_rect)
+            screen.blit(home_surf, home_rect)
         if promoting:
             pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(width/2-piece_size*2, height/2-piece_size/2, piece_size*4+40, piece_size), 0, 20)
             screen.blit(cancel_surf, cancel_rect)
@@ -324,10 +336,10 @@ def main():
         # AI play -------------------------------------------------------------------------------
 
         if ai_white and chess.turn == chess.piece.white:
-            chess.ai_play()
+            chess.ai_play(chess.piece.white)
             active_squares = [[chess.last_move[0]%8, chess.last_move[0]//8], [chess.last_move[1]%8, chess.last_move[1]//8], []]
         if ai_black and chess.turn == chess.piece.black:
-            chess.ai_play()
+            chess.ai_play(chess.piece.black)
             active_squares = [[chess.last_move[0]%8, chess.last_move[0]//8], [chess.last_move[1]%8, chess.last_move[1]//8], []]
 
     # Exit
